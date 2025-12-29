@@ -2,31 +2,29 @@ import { jsPDF } from 'jspdf';
 import { AnalysisResult, Relevance } from '../types/domainTypes';
 
 /**
- * CSV (se mantiene porque tu worker lo está importando)
+ * CSV
  */
 export const generateCsvBlob = (data: any[], headers: Record<string, string>): Blob => {
   const headerKeys = Object.keys(headers);
   const headerValues = Object.values(headers);
 
-  const csvRows = [headerValues.join(',')]; // Header row
+  const csvRows = [headerValues.join(',')];
 
   for (const item of data) {
     const values = headerKeys.map((key) => {
       const val = item[key] ?? '';
-      const escaped = ('' + val).replace(/"/g, '""'); // Escape double quotes
+      const escaped = ('' + val).replace(/"/g, '""');
       return `"${escaped}"`;
     });
     csvRows.push(values.join(','));
   }
 
   const csvString = csvRows.join('\n');
-  return new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel
+  return new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' });
 };
 
 /**
- * PDF: 1 sola fuente (Helvetica), jerarquía por tamaños/bold,
- * márgenes y espaciados consistentes, cabecera bien separada del contenido,
- * secciones en "bloques" (cards) y tablas limpias.
+ * PDF
  */
 export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string): Blob => {
   const { gazetteDate, norms, designatedAppointments, concludedAppointments } = result;
@@ -35,15 +33,14 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
   const pdfWidth = pdf.internal.pageSize.getWidth();
   const pdfHeight = pdf.internal.pageSize.getHeight();
 
-  // --- Layout tokens (consistentes) ---
+  // --- Layout tokens ---
   const marginX = 15;
   const marginTop = 16;
   const marginBottom = 14;
-  const headerHeight = 12; // altura de cabecera en páginas internas
+  const headerHeight = 12;
   const contentWidth = pdfWidth - marginX * 2;
 
   const sectionGap = 10;
-  const blockGap = 8;
 
   // Start Y for content in pages with header
   const contentStartY = marginTop + headerHeight + 6;
@@ -51,31 +48,34 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
   // Cursor
   let cursorY = marginTop;
 
-  // --- Palette (suave) ---
-  const primary = '#0B3A82'; // azul institucional sobrio
-  const text = '#0F172A'; // slate-900
-  const muted = '#475569'; // slate-600
-  const light = '#64748B'; // slate-500
-  const line = [226, 232, 240]; // slate-200
-  const headerFill = [241, 245, 249]; // slate-100
-  const blockFill = [248, 250, 252]; // slate-50
+  // --- Palette ---
+  const primary = '#0B3A82';
+  const text = '#0F172A';
+  const muted = '#475569';
+  const light = '#64748B';
 
-  // --- Font helpers: 1 sola fuente (helvetica) ---
+  // OJO: arrays usados SIN spread (por TS)
+  const line = [226, 232, 240];      // slate-200
+  const headerFill = [241, 245, 249]; // slate-100
+  const blockFill = [248, 250, 252];  // slate-50
+
+  // --- Font helpers (1 fuente) ---
   const setH1 = () => pdf.setFont('helvetica', 'bold').setFontSize(20).setTextColor('#FFFFFF');
   const setH2 = () => pdf.setFont('helvetica', 'bold').setFontSize(15).setTextColor(primary);
-  const setH3 = () => pdf.setFont('helvetica', 'bold').setFontSize(11).setTextColor(text);
   const setBody = () => pdf.setFont('helvetica', 'normal').setFontSize(10).setTextColor(text);
   const setSmall = () => pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(muted);
   const setTiny = () => pdf.setFont('helvetica', 'normal').setFontSize(8).setTextColor(light);
 
   // --- Data prep ---
   const waterSectorNorms = norms.filter((n) => n.relevanceToWaterSector !== Relevance.NINGUNA);
+
   const relevanceOrder: Record<Relevance, number> = {
     [Relevance.ALTA]: 1,
     [Relevance.MEDIA]: 2,
     [Relevance.BAJA]: 3,
     [Relevance.NINGUNA]: 4,
   };
+
   const sortedWaterSectorNorms = [...waterSectorNorms].sort(
     (a, b) => relevanceOrder[a.relevanceToWaterSector] - relevanceOrder[b.relevanceToWaterSector]
   );
@@ -87,19 +87,15 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
 
   // --- Utilities ---
   const drawHeader = () => {
-    // Cabecera en páginas internas (no en portada)
-    pdf.setDrawColor(...line);
+    pdf.setDrawColor(line[0], line[1], line[2]);
     pdf.setLineWidth(0.3);
 
-    // título izq
     setTiny();
     pdf.text('Análisis de Normas Legales - El Peruano', marginX, marginTop + 7);
 
-    // marca der
     pdf.setFont('helvetica', 'bold').setFontSize(9).setTextColor(primary);
     pdf.text('CION - Sunass', pdfWidth - marginX, marginTop + 7, { align: 'right' });
 
-    // línea separadora
     pdf.line(marginX, marginTop + headerHeight, pdfWidth - marginX, marginTop + headerHeight);
   };
 
@@ -125,8 +121,7 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
     }
   };
 
-  const roundedRect = (x: number, y: number, w: number, h: number, r = 2) => {
-    // jsPDF supports roundedRect in recent versions; but to be safe, fallback to rect if unavailable.
+  const roundedRectFill = (x: number, y: number, w: number, h: number, r = 2) => {
     // @ts-ignore
     if (typeof pdf.roundedRect === 'function') {
       // @ts-ignore
@@ -138,10 +133,10 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
 
   const drawBlock = (height: number) => {
     pdf.setFillColor(blockFill[0], blockFill[1], blockFill[2]);
-    roundedRect(marginX, cursorY, contentWidth, height, 2);
+    roundedRectFill(marginX, cursorY, contentWidth, height, 2);
   };
 
-  const safeText = (value: any) => String(value ?? '').trim();
+  const safeText = (v: any) => String(v ?? '').trim();
 
   const addSectionTitle = (title: string, subtitle?: string) => {
     checkPageBreak(18);
@@ -159,7 +154,7 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
     }
   };
 
-  // --- COVER PAGE ---
+  // --- COVER ---
   pdf.setFillColor(primary);
   pdf.rect(0, 0, pdfWidth, 62, 'F');
 
@@ -169,7 +164,6 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
   pdf.setFont('helvetica', 'normal').setFontSize(14).setTextColor('#EAF2FF');
   pdf.text('Diario Oficial "El Peruano"', pdfWidth / 2, 38, { align: 'center' });
 
-  // Body area on cover
   cursorY = 85;
   setBody();
   pdf.setTextColor(text);
@@ -183,11 +177,7 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
   const genDate = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
   pdf.text(`Generado el: ${genDate}`, pdfWidth / 2, cursorY, { align: 'center' });
 
-  // Summary "card" on cover (bloque)
   cursorY += 18;
-  const coverSummaryHeight = 26;
-  pdf.setFillColor(blockFill[0], blockFill[1], blockFill[2]);
-  roundedRect(marginX, cursorY, contentWidth, coverSummaryHeight, 3);
 
   const nNorms = sortedWaterSectorNorms.length;
   const nAppointments = allAppointments.length;
@@ -197,44 +187,46 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
     `${nAppointments} movimiento(s) de cargos públicos (designaciones y conclusiones). ` +
     `Las normas se listan priorizadas por nivel de relevancia.`;
 
+  const coverSummaryHeight = 26;
+  pdf.setFillColor(blockFill[0], blockFill[1], blockFill[2]);
+  roundedRectFill(marginX, cursorY, contentWidth, coverSummaryHeight, 3);
+
   setBody();
   const summaryLines = pdf.splitTextToSize(summaryText, contentWidth - 10);
   pdf.text(summaryLines, marginX + 5, cursorY + 10);
   cursorY += coverSummaryHeight;
 
-  // --- CONTENT SECTIONS ---
-  // (mantener "bloques y tablas", pero con márgenes/espacios correctos)
-
-  // 1) Resumen ejecutivo (en página de contenido) - opcional, pero ayuda a la lectura
+  // --- CONTENT ---
   ensureContentPage();
+
+  // Resumen ejecutivo
   addSectionTitle('Resumen ejecutivo');
 
-  // block resumen
   const execLines = pdf.splitTextToSize(summaryText, contentWidth - 10);
   const execBlockHeight = Math.max(18, execLines.length * 4 + 10);
-  checkPageBreak(execBlockHeight + blockGap);
+  checkPageBreak(execBlockHeight + 8);
   drawBlock(execBlockHeight);
   setBody();
   pdf.text(execLines, marginX + 5, cursorY + 9);
   cursorY += execBlockHeight + sectionGap;
 
-  // 2) Movimientos
+  // Movimientos
   if (allAppointments.length > 0) {
     addSectionTitle('Movimientos de cargos públicos');
 
-    // Table config
     const headers = ['Institución', 'Tipo', 'Cargo', 'Nombre'];
     const colW = [contentWidth * 0.30, contentWidth * 0.14, contentWidth * 0.32, contentWidth * 0.24];
     const headerH = 9;
     const padX = 2.2;
     const padY = 4.2;
-    const lineH = 4.1;
+    const lineHRow = 4.1;
 
-    // draw header row
     checkPageBreak(headerH + 6);
+
     pdf.setFillColor(headerFill[0], headerFill[1], headerFill[2]);
     pdf.rect(marginX, cursorY, contentWidth, headerH, 'F');
-    pdf.setDrawColor(...line);
+
+    pdf.setDrawColor(line[0], line[1], line[2]);
     pdf.setLineWidth(0.3);
     pdf.rect(marginX, cursorY, contentWidth, headerH);
 
@@ -246,7 +238,6 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
     });
     cursorY += headerH;
 
-    // rows
     pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(text);
 
     for (const appt of allAppointments) {
@@ -257,23 +248,19 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
         safeText(appt.personName),
       ];
 
-      // compute height by max wrapped lines in row
       const wrapped = row.map((t, i) => pdf.splitTextToSize(t, colW[i] - padX * 2));
       const maxLines = Math.max(...wrapped.map((l) => l.length));
-      const rowH = Math.max(10, maxLines * lineH + 4);
+      const rowH = Math.max(10, maxLines * lineHRow + 4);
 
       checkPageBreak(rowH + 2);
 
-      // row border line
-      pdf.setDrawColor(...line);
+      pdf.setDrawColor(line[0], line[1], line[2]);
       pdf.setLineWidth(0.3);
       pdf.rect(marginX, cursorY, contentWidth, rowH);
 
-      // cell text
       x = marginX;
       for (let i = 0; i < row.length; i++) {
-        const lines = wrapped[i];
-        pdf.text(lines, x + padX, cursorY + padY, { maxWidth: colW[i] - padX * 2 });
+        pdf.text(wrapped[i], x + padX, cursorY + padY, { maxWidth: colW[i] - padX * 2 });
         x += colW[i];
       }
 
@@ -283,7 +270,7 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
     cursorY += sectionGap;
   }
 
-  // 3) Normas (tabla con “bloque” de detalle dentro de la celda)
+  // Normas
   if (sortedWaterSectorNorms.length > 0) {
     addSectionTitle('Normas relevantes para Agua y Saneamiento', 'Ordenadas por relevancia (ALTA → MEDIA → BAJA).');
 
@@ -296,7 +283,6 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
     const smallH = 3.8;
 
     const calcRowHeight = (norm: any) => {
-      // all helvetica, jerarquía con tamaños/bold
       const relLines = pdf.splitTextToSize(safeText(norm.relevanceToWaterSector), colW[0] - pad * 2);
       const secLines = pdf.splitTextToSize(safeText(norm.sector), colW[1] - pad * 2);
       const pageLines = pdf.splitTextToSize(safeText(norm.pageNumber), colW[3] - pad * 2);
@@ -320,11 +306,12 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
       return Math.max(h1, h2, h3, h4) + pad * 2 + 2;
     };
 
-    // header row
     checkPageBreak(headerH + 6);
+
     pdf.setFillColor(headerFill[0], headerFill[1], headerFill[2]);
     pdf.rect(marginX, cursorY, contentWidth, headerH, 'F');
-    pdf.setDrawColor(...line);
+
+    pdf.setDrawColor(line[0], line[1], line[2]);
     pdf.setLineWidth(0.3);
     pdf.rect(marginX, cursorY, contentWidth, headerH);
 
@@ -336,28 +323,25 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
     });
     cursorY += headerH;
 
-    // rows
     for (const norm of sortedWaterSectorNorms) {
       const rowH = calcRowHeight(norm);
       checkPageBreak(rowH + 2);
 
-      // row border
-      pdf.setDrawColor(...line);
+      pdf.setDrawColor(line[0], line[1], line[2]);
       pdf.setLineWidth(0.3);
       pdf.rect(marginX, cursorY, contentWidth, rowH);
 
       const rowTop = cursorY;
 
-      // col 1: Relevancia (badge-like)
+      // Badge relevancia
       const rel = safeText(norm.relevanceToWaterSector);
       const badgeH = 7;
       const badgeW = colW[0] - pad * 2;
 
-      // badge color (ALTA/MEDIA/BAJA)
       const relFill =
         rel === Relevance.ALTA ? [220, 38, 38] : rel === Relevance.MEDIA ? [234, 179, 8] : [37, 99, 235];
+
       pdf.setFillColor(relFill[0], relFill[1], relFill[2]);
-      // “pill” (rounded) si existe, sino rect
       // @ts-ignore
       if (typeof pdf.roundedRect === 'function') {
         // @ts-ignore
@@ -365,15 +349,16 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
       } else {
         pdf.rect(marginX + pad, rowTop + pad, badgeW, badgeH, 'F');
       }
+
       pdf.setFont('helvetica', 'bold').setFontSize(8).setTextColor('#FFFFFF');
       pdf.text(rel, marginX + pad + badgeW / 2, rowTop + pad + 5.1, { align: 'center' });
 
-      // col 2: Sector
+      // Sector
       pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(text);
       const secLines = pdf.splitTextToSize(safeText(norm.sector), colW[1] - pad * 2);
       pdf.text(secLines, marginX + colW[0] + pad, rowTop + pad + 4.2);
 
-      // col 3: Detail block feel (sin otra fuente)
+      // Norma (detalle)
       const detailX = marginX + colW[0] + colW[1] + pad;
       const detailW = colW[2] - pad * 2;
       let y = rowTop + pad + 4.2;
@@ -392,7 +377,7 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
       const summaryLines = pdf.splitTextToSize(safeText(norm.summary), detailW);
       pdf.text(summaryLines, detailX, y);
 
-      // col 4: page
+      // Página
       pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(text);
       pdf.text(
         safeText(norm.pageNumber),
@@ -407,21 +392,12 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
     cursorY += sectionGap;
   }
 
-  // --- PAGE NUMBERING (y cabecera ya dibujada en páginas internas) ---
+  // --- Page numbering ---
   const pageCount = pdf.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     pdf.setPage(i);
-
-    // En portada NO dibujamos cabecera.
-    if (i > 1) {
-      // footer
-      setTiny();
-      pdf.text(`Página ${i} de ${pageCount}`, pdfWidth - marginX, pdfHeight - 8, { align: 'right' });
-    } else {
-      // footer portada (más discreto)
-      setTiny();
-      pdf.text(`Página 1 de ${pageCount}`, pdfWidth - marginX, pdfHeight - 8, { align: 'right' });
-    }
+    setTiny();
+    pdf.text(`Página ${i} de ${pageCount}`, pdfWidth - marginX, pdfHeight - 8, { align: 'right' });
   }
 
   return pdf.output('blob');
