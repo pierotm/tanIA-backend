@@ -1,8 +1,6 @@
-import fs from "fs";
-
-import { getLatestPdfFromDrive } from "../src/services/driveService"
+import { getLatestPdfFromDrive } from "./services/driveService"
 import { extractTextFromPdf } from "./services/pdfService";
-import { analyzeGazetteText } from "../src/services/geminiService"
+import { analyzeGazetteText } from "./services/geminiService"
 
 import {
   generateAnalysisPdfBlob,
