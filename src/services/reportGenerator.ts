@@ -1,192 +1,427 @@
 import { jsPDF } from 'jspdf';
 import { AnalysisResult, Relevance } from '../types/domainTypes';
 
-export const generateAnalysisPdfBlob = (
-  result: AnalysisResult,
-  fileName: string
-): Blob => {
-  const pdf = new jsPDF('p', 'mm', 'a4');
+/**
+ * CSV (se mantiene porque tu worker lo está importando)
+ */
+export const generateCsvBlob = (data: any[], headers: Record<string, string>): Blob => {
+  const headerKeys = Object.keys(headers);
+  const headerValues = Object.values(headers);
 
+  const csvRows = [headerValues.join(',')]; // Header row
+
+  for (const item of data) {
+    const values = headerKeys.map((key) => {
+      const val = item[key] ?? '';
+      const escaped = ('' + val).replace(/"/g, '""'); // Escape double quotes
+      return `"${escaped}"`;
+    });
+    csvRows.push(values.join(','));
+  }
+
+  const csvString = csvRows.join('\n');
+  return new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel
+};
+
+/**
+ * PDF: 1 sola fuente (Helvetica), jerarquía por tamaños/bold,
+ * márgenes y espaciados consistentes, cabecera bien separada del contenido,
+ * secciones en "bloques" (cards) y tablas limpias.
+ */
+export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string): Blob => {
+  const { gazetteDate, norms, designatedAppointments, concludedAppointments } = result;
+
+  const pdf = new jsPDF('p', 'mm', 'a4');
   const pdfWidth = pdf.internal.pageSize.getWidth();
   const pdfHeight = pdf.internal.pageSize.getHeight();
 
-  const PAGE_MARGIN = 18;
-  const SECTION_GAP = 14;
-  const BLOCK_PADDING = 8;
-  const contentWidth = pdfWidth - PAGE_MARGIN * 2;
+  // --- Layout tokens (consistentes) ---
+  const marginX = 15;
+  const marginTop = 16;
+  const marginBottom = 14;
+  const headerHeight = 12; // altura de cabecera en páginas internas
+  const contentWidth = pdfWidth - marginX * 2;
 
-  let cursorY = PAGE_MARGIN;
+  const sectionGap = 10;
+  const blockGap = 8;
 
-  /* ======================
-     Helpers
-  ====================== */
+  // Start Y for content in pages with header
+  const contentStartY = marginTop + headerHeight + 6;
 
+  // Cursor
+  let cursorY = marginTop;
+
+  // --- Palette (suave) ---
+  const primary = '#0B3A82'; // azul institucional sobrio
+  const text = '#0F172A'; // slate-900
+  const muted = '#475569'; // slate-600
+  const light = '#64748B'; // slate-500
+  const line = [226, 232, 240]; // slate-200
+  const headerFill = [241, 245, 249]; // slate-100
+  const blockFill = [248, 250, 252]; // slate-50
+
+  // --- Font helpers: 1 sola fuente (helvetica) ---
+  const setH1 = () => pdf.setFont('helvetica', 'bold').setFontSize(20).setTextColor('#FFFFFF');
+  const setH2 = () => pdf.setFont('helvetica', 'bold').setFontSize(15).setTextColor(primary);
+  const setH3 = () => pdf.setFont('helvetica', 'bold').setFontSize(11).setTextColor(text);
+  const setBody = () => pdf.setFont('helvetica', 'normal').setFontSize(10).setTextColor(text);
+  const setSmall = () => pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(muted);
+  const setTiny = () => pdf.setFont('helvetica', 'normal').setFontSize(8).setTextColor(light);
+
+  // --- Data prep ---
+  const waterSectorNorms = norms.filter((n) => n.relevanceToWaterSector !== Relevance.NINGUNA);
+  const relevanceOrder: Record<Relevance, number> = {
+    [Relevance.ALTA]: 1,
+    [Relevance.MEDIA]: 2,
+    [Relevance.BAJA]: 3,
+    [Relevance.NINGUNA]: 4,
+  };
+  const sortedWaterSectorNorms = [...waterSectorNorms].sort(
+    (a, b) => relevanceOrder[a.relevanceToWaterSector] - relevanceOrder[b.relevanceToWaterSector]
+  );
+
+  const allAppointments = [
+    ...designatedAppointments.map((d) => ({ ...d, type: 'Designado' as const })),
+    ...concludedAppointments.map((c) => ({ ...c, type: 'Concluido' as const })),
+  ];
+
+  // --- Utilities ---
   const drawHeader = () => {
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(9);
-    pdf.setTextColor(120);
-    pdf.text('Análisis de Normas Legales – El Peruano', PAGE_MARGIN, 12);
-    pdf.text('CION – SUNASS', pdfWidth - PAGE_MARGIN, 12, { align: 'right' });
-    pdf.setDrawColor(220);
-    pdf.line(PAGE_MARGIN, 15, pdfWidth - PAGE_MARGIN, 15);
-    cursorY = 22;
+    // Cabecera en páginas internas (no en portada)
+    pdf.setDrawColor(...line);
+    pdf.setLineWidth(0.3);
+
+    // título izq
+    setTiny();
+    pdf.text('Análisis de Normas Legales - El Peruano', marginX, marginTop + 7);
+
+    // marca der
+    pdf.setFont('helvetica', 'bold').setFontSize(9).setTextColor(primary);
+    pdf.text('CION - Sunass', pdfWidth - marginX, marginTop + 7, { align: 'right' });
+
+    // línea separadora
+    pdf.line(marginX, marginTop + headerHeight, pdfWidth - marginX, marginTop + headerHeight);
   };
 
-  const checkPageBreak = (needed: number) => {
-    if (cursorY + needed > pdfHeight - PAGE_MARGIN) {
-      pdf.addPage();
-      drawHeader();
+  const addPageWithHeader = () => {
+    pdf.addPage();
+    cursorY = contentStartY;
+    drawHeader();
+  };
+
+  const ensureContentPage = (() => {
+    let started = false;
+    return () => {
+      if (!started) {
+        addPageWithHeader();
+        started = true;
+      }
+    };
+  })();
+
+  const checkPageBreak = (neededHeight: number) => {
+    if (cursorY + neededHeight > pdfHeight - marginBottom) {
+      addPageWithHeader();
     }
   };
 
-  const drawSectionTitle = (title: string) => {
-    cursorY += SECTION_GAP;
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(14);
-    pdf.setTextColor(0, 51, 160);
-    pdf.text(title, PAGE_MARGIN, cursorY);
-    cursorY += 6;
+  const roundedRect = (x: number, y: number, w: number, h: number, r = 2) => {
+    // jsPDF supports roundedRect in recent versions; but to be safe, fallback to rect if unavailable.
+    // @ts-ignore
+    if (typeof pdf.roundedRect === 'function') {
+      // @ts-ignore
+      pdf.roundedRect(x, y, w, h, r, r, 'F');
+    } else {
+      pdf.rect(x, y, w, h, 'F');
+    }
   };
 
   const drawBlock = (height: number) => {
-    pdf.setFillColor(245, 247, 250);
-    pdf.roundedRect(
-      PAGE_MARGIN,
-      cursorY,
-      contentWidth,
-      height,
-      2,
-      2,
-      'F'
-    );
+    pdf.setFillColor(blockFill[0], blockFill[1], blockFill[2]);
+    roundedRect(marginX, cursorY, contentWidth, height, 2);
   };
 
-  /* ======================
-     COVER
-  ====================== */
+  const safeText = (value: any) => String(value ?? '').trim();
 
-  pdf.setFillColor(0, 51, 160);
-  pdf.rect(0, 0, pdfWidth, 60, 'F');
+  const addSectionTitle = (title: string, subtitle?: string) => {
+    checkPageBreak(18);
+    setH2();
+    pdf.text(title, marginX, cursorY);
+    cursorY += 7;
 
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(22);
-  pdf.setTextColor(255);
-  pdf.text('Análisis de Normas Legales', pdfWidth / 2, 28, { align: 'center' });
+    if (subtitle) {
+      setSmall();
+      const lines = pdf.splitTextToSize(subtitle, contentWidth);
+      pdf.text(lines, marginX, cursorY);
+      cursorY += lines.length * 4 + 2;
+    } else {
+      cursorY += 2;
+    }
+  };
 
-  pdf.setFontSize(14);
-  pdf.text('Diario Oficial El Peruano', pdfWidth / 2, 38, { align: 'center' });
+  // --- COVER PAGE ---
+  pdf.setFillColor(primary);
+  pdf.rect(0, 0, pdfWidth, 62, 'F');
 
-  pdf.setFont('helvetica', 'normal');
-  pdf.setTextColor(60);
-  pdf.setFontSize(11);
-  pdf.text(`Fecha del diario: ${result.gazetteDate}`, pdfWidth / 2, 90, { align: 'center' });
-  pdf.text(`Archivo analizado: ${fileName}`, pdfWidth / 2, 98, { align: 'center' });
-  pdf.text(
-    `Elaborado por: Centro de Inteligencia de Operaciones para la Innovación – CION / SUNASS`,
-    pdfWidth / 2,
-    106,
-    { align: 'center', maxWidth: contentWidth }
-  );
+  setH1();
+  pdf.text('Análisis de Normas Legales', pdfWidth / 2, 26, { align: 'center' });
 
-  pdf.addPage();
-  drawHeader();
+  pdf.setFont('helvetica', 'normal').setFontSize(14).setTextColor('#EAF2FF');
+  pdf.text('Diario Oficial "El Peruano"', pdfWidth / 2, 38, { align: 'center' });
 
-  /* ======================
-     RESUMEN EJECUTIVO
-  ====================== */
+  // Body area on cover
+  cursorY = 85;
+  setBody();
+  pdf.setTextColor(text);
+  pdf.text(`Fecha del diario: ${safeText(gazetteDate)}`, pdfWidth / 2, cursorY, { align: 'center' });
+  cursorY += 8;
 
-  drawSectionTitle('Resumen ejecutivo');
+  setSmall();
+  pdf.text(`Archivo analizado: ${safeText(fileName)}`, pdfWidth / 2, cursorY, { align: 'center' });
+  cursorY += 6;
 
-  const resumenText = `Se identificaron ${
-    result.norms.length
-  } normas relevantes (ALTA / MEDIA / BAJA) y ${
-    result.designatedAppointments.length + result.concludedAppointments.length
-  } movimientos de cargos públicos. Las normas se listan priorizadas por nivel de relevancia.`;
+  const genDate = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+  pdf.text(`Generado el: ${genDate}`, pdfWidth / 2, cursorY, { align: 'center' });
 
-  const resumenLines = pdf.splitTextToSize(resumenText, contentWidth - BLOCK_PADDING * 2);
-  const resumenHeight = resumenLines.length * 5 + BLOCK_PADDING * 2;
+  // Summary "card" on cover (bloque)
+  cursorY += 18;
+  const coverSummaryHeight = 26;
+  pdf.setFillColor(blockFill[0], blockFill[1], blockFill[2]);
+  roundedRect(marginX, cursorY, contentWidth, coverSummaryHeight, 3);
 
-  checkPageBreak(resumenHeight);
-  drawBlock(resumenHeight);
+  const nNorms = sortedWaterSectorNorms.length;
+  const nAppointments = allAppointments.length;
 
-  pdf.setFont('helvetica', 'normal');
-  pdf.setFontSize(11);
-  pdf.setTextColor(40);
-  pdf.text(
-    resumenLines,
-    PAGE_MARGIN + BLOCK_PADDING,
-    cursorY + BLOCK_PADDING + 4
-  );
+  const summaryText =
+    `Se identificaron ${nNorms} norma(s) relevante(s) (ALTA/MEDIA/BAJA) y ` +
+    `${nAppointments} movimiento(s) de cargos públicos (designaciones y conclusiones). ` +
+    `Las normas se listan priorizadas por nivel de relevancia.`;
 
-  cursorY += resumenHeight;
+  setBody();
+  const summaryLines = pdf.splitTextToSize(summaryText, contentWidth - 10);
+  pdf.text(summaryLines, marginX + 5, cursorY + 10);
+  cursorY += coverSummaryHeight;
 
-  /* ======================
-     MOVIMIENTOS DE CARGOS
-  ====================== */
+  // --- CONTENT SECTIONS ---
+  // (mantener "bloques y tablas", pero con márgenes/espacios correctos)
 
-  const allAppointments = [
-    ...result.designatedAppointments.map(a => ({ ...a, type: 'Designado' })),
-    ...result.concludedAppointments.map(a => ({ ...a, type: 'Concluido' })),
-  ];
+  // 1) Resumen ejecutivo (en página de contenido) - opcional, pero ayuda a la lectura
+  ensureContentPage();
+  addSectionTitle('Resumen ejecutivo');
 
-  if (allAppointments.length) {
-    drawSectionTitle('Movimientos de cargos públicos');
+  // block resumen
+  const execLines = pdf.splitTextToSize(summaryText, contentWidth - 10);
+  const execBlockHeight = Math.max(18, execLines.length * 4 + 10);
+  checkPageBreak(execBlockHeight + blockGap);
+  drawBlock(execBlockHeight);
+  setBody();
+  pdf.text(execLines, marginX + 5, cursorY + 9);
+  cursorY += execBlockHeight + sectionGap;
 
+  // 2) Movimientos
+  if (allAppointments.length > 0) {
+    addSectionTitle('Movimientos de cargos públicos');
+
+    // Table config
     const headers = ['Institución', 'Tipo', 'Cargo', 'Nombre'];
-    const colWidths = [
-      contentWidth * 0.32,
-      contentWidth * 0.12,
-      contentWidth * 0.32,
-      contentWidth * 0.24,
-    ];
+    const colW = [contentWidth * 0.30, contentWidth * 0.14, contentWidth * 0.32, contentWidth * 0.24];
+    const headerH = 9;
+    const padX = 2.2;
+    const padY = 4.2;
+    const lineH = 4.1;
 
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(10);
-    pdf.setFillColor(235, 238, 242);
-    pdf.rect(PAGE_MARGIN, cursorY, contentWidth, 8, 'F');
+    // draw header row
+    checkPageBreak(headerH + 6);
+    pdf.setFillColor(headerFill[0], headerFill[1], headerFill[2]);
+    pdf.rect(marginX, cursorY, contentWidth, headerH, 'F');
+    pdf.setDrawColor(...line);
+    pdf.setLineWidth(0.3);
+    pdf.rect(marginX, cursorY, contentWidth, headerH);
 
-    let x = PAGE_MARGIN;
+    pdf.setFont('helvetica', 'bold').setFontSize(9).setTextColor(muted);
+    let x = marginX;
     headers.forEach((h, i) => {
-      pdf.text(h, x + 2, cursorY + 6);
-      x += colWidths[i];
+      pdf.text(h, x + padX, cursorY + 6);
+      x += colW[i];
     });
+    cursorY += headerH;
 
-    cursorY += 8;
+    // rows
+    pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(text);
 
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(9);
+    for (const appt of allAppointments) {
+      const row = [
+        safeText(appt.institution),
+        safeText(appt.type),
+        safeText(appt.position),
+        safeText(appt.personName),
+      ];
 
-    allAppointments.forEach(row => {
-      const rowHeight = 10;
-      checkPageBreak(rowHeight);
+      // compute height by max wrapped lines in row
+      const wrapped = row.map((t, i) => pdf.splitTextToSize(t, colW[i] - padX * 2));
+      const maxLines = Math.max(...wrapped.map((l) => l.length));
+      const rowH = Math.max(10, maxLines * lineH + 4);
 
-      let cx = PAGE_MARGIN;
-      [row.institution, row.type, row.position, row.personName].forEach((cell, i) => {
-        pdf.text(cell, cx + 2, cursorY + 7, { maxWidth: colWidths[i] - 4 });
-        cx += colWidths[i];
-      });
+      checkPageBreak(rowH + 2);
 
-      pdf.setDrawColor(220);
-      pdf.line(PAGE_MARGIN, cursorY + rowHeight, PAGE_MARGIN + contentWidth, cursorY + rowHeight);
-      cursorY += rowHeight;
-    });
+      // row border line
+      pdf.setDrawColor(...line);
+      pdf.setLineWidth(0.3);
+      pdf.rect(marginX, cursorY, contentWidth, rowH);
+
+      // cell text
+      x = marginX;
+      for (let i = 0; i < row.length; i++) {
+        const lines = wrapped[i];
+        pdf.text(lines, x + padX, cursorY + padY, { maxWidth: colW[i] - padX * 2 });
+        x += colW[i];
+      }
+
+      cursorY += rowH;
+    }
+
+    cursorY += sectionGap;
   }
 
-  /* ======================
-     NUMERACIÓN
-  ====================== */
+  // 3) Normas (tabla con “bloque” de detalle dentro de la celda)
+  if (sortedWaterSectorNorms.length > 0) {
+    addSectionTitle('Normas relevantes para Agua y Saneamiento', 'Ordenadas por relevancia (ALTA → MEDIA → BAJA).');
 
-  const totalPages = pdf.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
+    const headers = ['Relevancia', 'Sector', 'Norma', 'Pág.'];
+    const colW = [contentWidth * 0.15, contentWidth * 0.20, contentWidth * 0.55, contentWidth * 0.10];
+
+    const headerH = 9;
+    const pad = 2.4;
+    const lineH = 4.2;
+    const smallH = 3.8;
+
+    const calcRowHeight = (norm: any) => {
+      // all helvetica, jerarquía con tamaños/bold
+      const relLines = pdf.splitTextToSize(safeText(norm.relevanceToWaterSector), colW[0] - pad * 2);
+      const secLines = pdf.splitTextToSize(safeText(norm.sector), colW[1] - pad * 2);
+      const pageLines = pdf.splitTextToSize(safeText(norm.pageNumber), colW[3] - pad * 2);
+
+      const detailW = colW[2] - pad * 2;
+
+      pdf.setFont('helvetica', 'bold').setFontSize(9);
+      const titleLines = pdf.splitTextToSize(safeText(norm.title), detailW);
+
+      pdf.setFont('helvetica', 'normal').setFontSize(8);
+      const idLines = pdf.splitTextToSize(safeText(norm.normId), detailW);
+
+      pdf.setFont('helvetica', 'normal').setFontSize(8);
+      const summaryLines = pdf.splitTextToSize(safeText(norm.summary), detailW);
+
+      const h1 = relLines.length * lineH;
+      const h2 = secLines.length * lineH;
+      const h3 = titleLines.length * lineH + idLines.length * smallH + summaryLines.length * smallH + 4;
+      const h4 = pageLines.length * lineH;
+
+      return Math.max(h1, h2, h3, h4) + pad * 2 + 2;
+    };
+
+    // header row
+    checkPageBreak(headerH + 6);
+    pdf.setFillColor(headerFill[0], headerFill[1], headerFill[2]);
+    pdf.rect(marginX, cursorY, contentWidth, headerH, 'F');
+    pdf.setDrawColor(...line);
+    pdf.setLineWidth(0.3);
+    pdf.rect(marginX, cursorY, contentWidth, headerH);
+
+    pdf.setFont('helvetica', 'bold').setFontSize(9).setTextColor(muted);
+    let x = marginX;
+    headers.forEach((h, i) => {
+      pdf.text(h, x + pad, cursorY + 6);
+      x += colW[i];
+    });
+    cursorY += headerH;
+
+    // rows
+    for (const norm of sortedWaterSectorNorms) {
+      const rowH = calcRowHeight(norm);
+      checkPageBreak(rowH + 2);
+
+      // row border
+      pdf.setDrawColor(...line);
+      pdf.setLineWidth(0.3);
+      pdf.rect(marginX, cursorY, contentWidth, rowH);
+
+      const rowTop = cursorY;
+
+      // col 1: Relevancia (badge-like)
+      const rel = safeText(norm.relevanceToWaterSector);
+      const badgeH = 7;
+      const badgeW = colW[0] - pad * 2;
+
+      // badge color (ALTA/MEDIA/BAJA)
+      const relFill =
+        rel === Relevance.ALTA ? [220, 38, 38] : rel === Relevance.MEDIA ? [234, 179, 8] : [37, 99, 235];
+      pdf.setFillColor(relFill[0], relFill[1], relFill[2]);
+      // “pill” (rounded) si existe, sino rect
+      // @ts-ignore
+      if (typeof pdf.roundedRect === 'function') {
+        // @ts-ignore
+        pdf.roundedRect(marginX + pad, rowTop + pad, badgeW, badgeH, 2, 2, 'F');
+      } else {
+        pdf.rect(marginX + pad, rowTop + pad, badgeW, badgeH, 'F');
+      }
+      pdf.setFont('helvetica', 'bold').setFontSize(8).setTextColor('#FFFFFF');
+      pdf.text(rel, marginX + pad + badgeW / 2, rowTop + pad + 5.1, { align: 'center' });
+
+      // col 2: Sector
+      pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(text);
+      const secLines = pdf.splitTextToSize(safeText(norm.sector), colW[1] - pad * 2);
+      pdf.text(secLines, marginX + colW[0] + pad, rowTop + pad + 4.2);
+
+      // col 3: Detail block feel (sin otra fuente)
+      const detailX = marginX + colW[0] + colW[1] + pad;
+      const detailW = colW[2] - pad * 2;
+      let y = rowTop + pad + 4.2;
+
+      pdf.setFont('helvetica', 'bold').setFontSize(9).setTextColor(text);
+      const titleLines = pdf.splitTextToSize(safeText(norm.title), detailW);
+      pdf.text(titleLines, detailX, y);
+      y += titleLines.length * lineH;
+
+      pdf.setFont('helvetica', 'normal').setFontSize(8).setTextColor(primary);
+      const idLines = pdf.splitTextToSize(safeText(norm.normId), detailW);
+      pdf.text(idLines, detailX, y);
+      y += idLines.length * smallH + 1;
+
+      pdf.setFont('helvetica', 'normal').setFontSize(8).setTextColor(muted);
+      const summaryLines = pdf.splitTextToSize(safeText(norm.summary), detailW);
+      pdf.text(summaryLines, detailX, y);
+
+      // col 4: page
+      pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(text);
+      pdf.text(
+        safeText(norm.pageNumber),
+        marginX + colW[0] + colW[1] + colW[2] + colW[3] / 2,
+        rowTop + pad + 5.2,
+        { align: 'center' }
+      );
+
+      cursorY += rowH;
+    }
+
+    cursorY += sectionGap;
+  }
+
+  // --- PAGE NUMBERING (y cabecera ya dibujada en páginas internas) ---
+  const pageCount = pdf.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
     pdf.setPage(i);
-    pdf.setFontSize(9);
-    pdf.setTextColor(140);
-    pdf.text(
-      `Página ${i} de ${totalPages}`,
-      pdfWidth - PAGE_MARGIN,
-      pdfHeight - 10,
-      { align: 'right' }
-    );
+
+    // En portada NO dibujamos cabecera.
+    if (i > 1) {
+      // footer
+      setTiny();
+      pdf.text(`Página ${i} de ${pageCount}`, pdfWidth - marginX, pdfHeight - 8, { align: 'right' });
+    } else {
+      // footer portada (más discreto)
+      setTiny();
+      pdf.text(`Página 1 de ${pageCount}`, pdfWidth - marginX, pdfHeight - 8, { align: 'right' });
+    }
   }
 
   return pdf.output('blob');
