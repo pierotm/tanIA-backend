@@ -36,7 +36,10 @@ jobs:
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
 
           # Gemini
-          API_KEY: ${{ secrets.API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          
+          # Email test
+          EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
 
         run: |
           npx ts-node src/worker.ts
