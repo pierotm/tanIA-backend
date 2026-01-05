@@ -91,3 +91,100 @@ export async function getLatestPdfFromDrive() {
         throw error;
     }
 }
+
+/**
+ * Obtiene todos los bloques PDF del cuadernillo más reciente,
+ * los ordena por rango de páginas y devuelve sus contenidos.
+ */
+export async function getAllPdfBlocksFromDrive(): Promise<
+  Array<{ buffer: Buffer; filename: string }>
+> {
+  try {
+    const auth = getAuthClient();
+    const drive = google.drive({ version: 'v3', auth });
+
+    console.log(`[Drive] Listando todos los PDFs de la carpeta: ${FOLDER_ID}`);
+
+    const res = await drive.files.list({
+      q: `'${FOLDER_ID}' in parents and mimeType='application/pdf' and trashed=false`,
+      fields: 'files(id, name, createdTime)',
+      pageSize: 1000
+    });
+
+    const files = res.data.files ?? [];
+    if (files.length === 0) {
+      console.log('[Drive] No se encontraron PDFs en la carpeta.');
+      return [];
+    }
+
+    // Regex para nombres tipo: YYYYMMDD_p001-025.pdf
+    const FILE_REGEX = /^(\d{8})_p(\d{3})-\d{3}\.pdf$/i;
+
+    // Parsear archivos válidos
+    const parsedFiles = files
+      .map(f => {
+        if (!f.name || !f.id) return null;
+        const match = f.name.match(FILE_REGEX);
+        if (!match) return null;
+
+        return {
+          id: f.id,
+          filename: f.name,
+          date: match[1],            // YYYYMMDD
+          startPage: Number(match[2]) // 001 → 1
+        };
+      })
+      .filter(Boolean) as Array<{
+        id: string;
+        filename: string;
+        date: string;
+        startPage: number;
+      }>;
+
+    if (parsedFiles.length === 0) {
+      console.log('[Drive] No se encontraron PDFs con el patrón esperado.');
+      return [];
+    }
+
+    // 1️⃣ Determinar el cuadernillo más reciente (fecha mayor)
+    const latestDate = parsedFiles
+      .map(f => f.date)
+      .sort()
+      .pop()!;
+
+    console.log(`[Drive] Cuadernillo más reciente detectado: ${latestDate}`);
+
+    // 2️⃣ Filtrar solo PDFs de ese cuadernillo
+    const blocksOfTheDay = parsedFiles
+      .filter(f => f.date === latestDate)
+      .sort((a, b) => a.startPage - b.startPage);
+
+    console.log(`[Drive] ${blocksOfTheDay.length} bloques encontrados para el cuadernillo ${latestDate}`);
+
+    // 3️⃣ Descargar los PDFs en orden
+    const results: Array<{ buffer: Buffer; filename: string }> = [];
+
+    for (const block of blocksOfTheDay) {
+      console.log(`[Drive] Descargando bloque ${block.filename}...`);
+
+      const fileRes = await drive.files.get(
+        {
+          fileId: block.id,
+          alt: 'media'
+        },
+        { responseType: 'arraybuffer' }
+      );
+
+      const buffer = Buffer.from(fileRes.data as ArrayBuffer);
+      results.push({
+        buffer,
+        filename: block.filename
+      });
+    }
+
+    return results;
+  } catch (error) {
+    console.error('[Drive Error] Error al obtener bloques del cuadernillo:', error);
+    throw error;
+  }
+}
