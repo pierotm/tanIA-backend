@@ -24,14 +24,9 @@ export const analyzeGazetteText = async (pagesText: Array<{ page: number; text: 
     no de exhaustividad normativa.
 
     OBJETIVOS PRINCIPALES
-    1. Identificar la fecha principal de publicación del diario.
-    2. Registrar normas relevantes para el sector Agua y Saneamiento,
-      ya sea por impacto directo o indirecto,
-      siempre que dicho impacto sea funcional
-      (regulación, tarifas, gestión, organización institucional).
-    3. Registrar movimientos de cargos (designaciones, encargaturas,
-      renuncias y conclusiones de designación) relevantes para la entidad
-      y su ecosistema institucional.
+    1. Identificar la fecha de publicación principal.
+    2. Extraer normas con impacto en el sector Agua y Saneamiento (tarifas, infraestructura, gestión de recursos hídricos, reglamentos de SUNASS, MVCS, ANA).
+    3. Monitorizar movimientos de cargos de confianza y directivos en todo el aparato estatal.
 
     CRITERIO REAL DE INCLUSIÓN:
     Incluye SOLO normas que cumplan al menos uno de estos criterios:
