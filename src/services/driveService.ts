@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import * as dotenv from 'dotenv';
 import { Buffer } from 'buffer';
+import { normalizeNormId } from '../utils/normalizeNormId';
 // Cargar variables de entorno si se ejecuta localmente
 dotenv.config();
 // Configuración desde variables de entorno
@@ -31,6 +32,14 @@ const getAuthClient = () => {
     });
     return oauth2Client;
 };
+
+// Helpers
+const normalizeTitle = (t: string): string =>
+  t
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
 /**
  * Función principal para obtener el último PDF de la carpeta configurada.
  * Retorna el contenido del archivo como un Buffer.
@@ -146,7 +155,7 @@ export async function getAllPdfBlocksFromDrive(): Promise<
       return [];
     }
 
-    // 1️⃣ Determinar el cuadernillo más reciente (fecha mayor)
+    // Determinar el cuadernillo más reciente (fecha mayor)
     const latestDate = parsedFiles
       .map(f => f.date)
       .sort()
@@ -154,14 +163,14 @@ export async function getAllPdfBlocksFromDrive(): Promise<
 
     console.log(`[Drive] Cuadernillo más reciente detectado: ${latestDate}`);
 
-    // 2️⃣ Filtrar solo PDFs de ese cuadernillo
+    // Filtrar solo PDFs de ese cuadernillo
     const blocksOfTheDay = parsedFiles
       .filter(f => f.date === latestDate)
       .sort((a, b) => a.startPage - b.startPage);
 
     console.log(`[Drive] ${blocksOfTheDay.length} bloques encontrados para el cuadernillo ${latestDate}`);
 
-    // 3️⃣ Descargar los PDFs en orden
+    // Descargar los PDFs en orden
     const results: Array<{ buffer: Buffer; filename: string }> = [];
 
     for (const block of blocksOfTheDay) {
@@ -188,3 +197,40 @@ export async function getAllPdfBlocksFromDrive(): Promise<
     throw error;
   }
 }
+
+export const getLatestIndiceNormasFromDrive = async (): Promise<Record<string, string>> => {
+  const auth = getAuthClient();
+  const drive = google.drive({ version: "v3", auth });
+
+  const res = await drive.files.list({
+    q: `'${FOLDER_ID}' in parents and name contains 'indice_normas_' and trashed=false`,
+    orderBy: "createdTime desc",
+    pageSize: 1,
+    fields: "files(id, name)",
+  });
+
+  const file = res.data.files?.[0];
+  if (!file?.id) {
+    console.warn("No se encontró indice_normas_*.json en Drive");
+    return {};
+  }
+
+  const fileRes = await drive.files.get(
+    { fileId: file.id, alt: "media" },
+    { responseType: "arraybuffer" }
+  );
+
+  const content = JSON.parse(
+    Buffer.from(fileRes.data as ArrayBuffer).toString("utf-8")
+  );
+
+  const map: Record<string, string> = {};
+
+  for (const norma of content.normas ?? []) {
+    if (norma.titulo && norma.url) {
+      map[normalizeNormId(norma.titulo)] = norma.url;
+    }
+  }
+
+  return map;
+};

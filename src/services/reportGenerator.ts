@@ -1,5 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { AnalysisResult, Relevance } from '../types/domainTypes';
+import { normalizeNormId } from '../utils/normalizeNormId';
+
 
 /**
  * CSV
@@ -26,7 +28,10 @@ export const generateCsvBlob = (data: any[], headers: Record<string, string>): B
 /**
  * PDF
  */
-export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string): Blob => {
+export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string, indiceNormas: Record<string, string>): Blob => {
+  const normalizeTitle = (t: string) =>
+    t.toUpperCase().replace(/\s+/g, ' ').trim();
+  
   const { gazetteDate, norms, designatedAppointments, concludedAppointments } = result;
 
   const pdf = new jsPDF('p', 'mm', 'a4');
@@ -50,6 +55,7 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
 
   // --- Palette ---
   const primary = '#0B3A82';
+  const linkBlue = '#1D4ED8';
   const text = '#0F172A';
   const muted = '#475569';
   const light = '#64748B';
@@ -65,6 +71,8 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
   const setBody = () => pdf.setFont('helvetica', 'normal').setFontSize(10).setTextColor(text);
   const setSmall = () => pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(muted);
   const setTiny = () => pdf.setFont('helvetica', 'normal').setFontSize(8).setTextColor(light);
+
+  const safeText = (v: any) => String(v ?? '').trim();
 
   // --- Data prep ---
   const waterSectorNorms = norms.filter((n) => n.relevanceToWaterSector !== Relevance.NINGUNA);
@@ -135,8 +143,6 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
     pdf.setFillColor(blockFill[0], blockFill[1], blockFill[2]);
     roundedRectFill(marginX, cursorY, contentWidth, height, 2);
   };
-
-  const safeText = (v: any) => String(v ?? '').trim();
 
   const addSectionTitle = (title: string, subtitle?: string) => {
     checkPageBreak(18);
@@ -272,10 +278,18 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
 
   // Normas
   if (sortedWaterSectorNorms.length > 0) {
-    addSectionTitle('Normas relevantes para Agua y Saneamiento', 'Ordenadas por relevancia (ALTA → MEDIA → BAJA).');
+    addSectionTitle(
+      'Normas relevantes para Agua y Saneamiento',
+      'Ordenadas por relevancia (ALTA → MEDIA → BAJA).'
+    );
 
     const headers = ['Relevancia', 'Sector', 'Norma', 'Pág.'];
-    const colW = [contentWidth * 0.15, contentWidth * 0.20, contentWidth * 0.55, contentWidth * 0.10];
+    const colW = [
+      contentWidth * 0.15,
+      contentWidth * 0.20,
+      contentWidth * 0.55,
+      contentWidth * 0.10
+    ];
 
     const headerH = 9;
     const pad = 2.4;
@@ -283,9 +297,18 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
     const smallH = 3.8;
 
     const calcRowHeight = (norm: any) => {
-      const relLines = pdf.splitTextToSize(safeText(norm.relevanceToWaterSector), colW[0] - pad * 2);
-      const secLines = pdf.splitTextToSize(safeText(norm.sector), colW[1] - pad * 2);
-      const pageLines = pdf.splitTextToSize(safeText(norm.pageNumber), colW[3] - pad * 2);
+      const relLines = pdf.splitTextToSize(
+        safeText(norm.relevanceToWaterSector),
+        colW[0] - pad * 2
+      );
+      const secLines = pdf.splitTextToSize(
+        safeText(norm.sector),
+        colW[1] - pad * 2
+      );
+      const pageLines = pdf.splitTextToSize(
+        safeText(norm.pageNumber),
+        colW[3] - pad * 2
+      );
 
       const detailW = colW[2] - pad * 2;
 
@@ -295,12 +318,18 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
       pdf.setFont('helvetica', 'normal').setFontSize(8);
       const idLines = pdf.splitTextToSize(safeText(norm.normId), detailW);
 
-      pdf.setFont('helvetica', 'normal').setFontSize(8);
-      const summaryLines = pdf.splitTextToSize(safeText(norm.summary), detailW);
+      const summaryLines = pdf.splitTextToSize(
+        safeText(norm.summary),
+        detailW
+      );
 
       const h1 = relLines.length * lineH;
       const h2 = secLines.length * lineH;
-      const h3 = titleLines.length * lineH + idLines.length * smallH + summaryLines.length * smallH + 4;
+      const h3 =
+        titleLines.length * lineH +
+        idLines.length * smallH +
+        summaryLines.length * smallH +
+        4;
       const h4 = pageLines.length * lineH;
 
       return Math.max(h1, h2, h3, h4) + pad * 2 + 2;
@@ -339,23 +368,43 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
       const badgeW = colW[0] - pad * 2;
 
       const relFill =
-        rel === Relevance.ALTA ? [220, 38, 38] : rel === Relevance.MEDIA ? [234, 179, 8] : [37, 99, 235];
+        rel === Relevance.ALTA
+          ? [220, 38, 38]
+          : rel === Relevance.MEDIA
+          ? [234, 179, 8]
+          : [37, 99, 235];
 
       pdf.setFillColor(relFill[0], relFill[1], relFill[2]);
       // @ts-ignore
       if (typeof pdf.roundedRect === 'function') {
         // @ts-ignore
-        pdf.roundedRect(marginX + pad, rowTop + pad, badgeW, badgeH, 2, 2, 'F');
+        pdf.roundedRect(
+          marginX + pad,
+          rowTop + pad,
+          badgeW,
+          badgeH,
+          2,
+          2,
+          'F'
+        );
       } else {
         pdf.rect(marginX + pad, rowTop + pad, badgeW, badgeH, 'F');
       }
 
       pdf.setFont('helvetica', 'bold').setFontSize(8).setTextColor('#FFFFFF');
-      pdf.text(rel, marginX + pad + badgeW / 2, rowTop + pad + 5.1, { align: 'center' });
+      pdf.text(
+        rel,
+        marginX + pad + badgeW / 2,
+        rowTop + pad + 5.1,
+        { align: 'center' }
+      );
 
       // Sector
       pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(text);
-      const secLines = pdf.splitTextToSize(safeText(norm.sector), colW[1] - pad * 2);
+      const secLines = pdf.splitTextToSize(
+        safeText(norm.sector),
+        colW[1] - pad * 2
+      );
       pdf.text(secLines, marginX + colW[0] + pad, rowTop + pad + 4.2);
 
       // Norma (detalle)
@@ -363,25 +412,99 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
       const detailW = colW[2] - pad * 2;
       let y = rowTop + pad + 4.2;
 
+      // TÍTULO → NO clickeable
       pdf.setFont('helvetica', 'bold').setFontSize(9).setTextColor(text);
-      const titleLines = pdf.splitTextToSize(safeText(norm.title), detailW);
+      const titleLines = pdf.splitTextToSize(
+        safeText(norm.title),
+        detailW
+      );
       pdf.text(titleLines, detailX, y);
       y += titleLines.length * lineH;
 
+      // ID → ÚNICO clickeable
+      /*const link = norm.normId
+        ? indiceNormas[normalizeNormId(norm.normId)]
+        : undefined;*/
+      
+      const normalizedId = normalizeNormId(norm.normId);
+      const link = norm.normId
+        ? indiceNormas[normalizedId]
+        : undefined;
+      // 🔍 DEBUG CLAVE (TEMPORAL)
+      console.log('[MATCH DEBUG]', {
+        originalNormId: norm.normId,
+        normalizedNormId: normalizedId,
+        linkFound: !!link,
+        link,
+      });
+
       pdf.setFont('helvetica', 'normal').setFontSize(8).setTextColor(primary);
-      const idLines = pdf.splitTextToSize(safeText(norm.normId), detailW);
-      pdf.text(idLines, detailX, y);
+      const idLines = pdf.splitTextToSize(
+        safeText(norm.normId),
+        detailW
+      );
+      /*
+      if (link) {
+        // Solo la primera línea será clickeable (normalmente el ID no se parte)
+        pdf.textWithLink(String(idLines[0]), detailX, y, link);
+
+        // Si por algún motivo se partió en varias líneas, dibuja las demás sin link
+        if (idLines.length > 1) {
+          pdf.text(idLines.slice(1), detailX, y + smallH);
+        }
+      } else {
+        // Si no hay URL en el índice, se imprime normal (sin link)
+        pdf.text(idLines, detailX, y);
+      }*/
+
+
+      if (link) {
+        const text = String(idLines[0]);
+
+        // Dibuja el texto normal
+        pdf.text(text, detailX, y);
+
+        // Calcula el tamaño real del texto
+        const textWidth = pdf.getTextWidth(text);
+        const linkHeight = 4; // altura aproximada de línea
+
+        // Crea la anotación de link (ESTO ES LO CLAVE)
+        (pdf as any).link(
+          detailX,
+          y - 3,           // ajusta verticalmente
+          textWidth,
+          linkHeight,
+          { url: link }
+        );
+
+        // Resto de líneas sin link
+        if (idLines.length > 1) {
+          pdf.text(idLines.slice(1), detailX, y + smallH);
+        }
+      } else {
+        pdf.text(idLines, detailX, y);
+      }
+
+
       y += idLines.length * smallH + 1;
 
+      // Resumen → NO clickeable
       pdf.setFont('helvetica', 'normal').setFontSize(8).setTextColor(muted);
-      const summaryLines = pdf.splitTextToSize(safeText(norm.summary), detailW);
+      const summaryLines = pdf.splitTextToSize(
+        safeText(norm.summary),
+        detailW
+      );
       pdf.text(summaryLines, detailX, y);
 
       // Página
       pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(text);
       pdf.text(
         safeText(norm.pageNumber),
-        marginX + colW[0] + colW[1] + colW[2] + colW[3] / 2,
+        marginX +
+          colW[0] +
+          colW[1] +
+          colW[2] +
+          colW[3] / 2,
         rowTop + pad + 5.2,
         { align: 'center' }
       );
@@ -391,6 +514,7 @@ export const generateAnalysisPdfBlob = (result: AnalysisResult, fileName: string
 
     cursorY += sectionGap;
   }
+
 
   // --- Page numbering ---
   const pageCount = pdf.getNumberOfPages();

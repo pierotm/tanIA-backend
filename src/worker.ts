@@ -1,5 +1,5 @@
 import { Buffer } from 'buffer';
-import { getLatestPdfFromDrive, getAllPdfBlocksFromDrive } from "./services/driveService"
+import { getLatestPdfFromDrive, getAllPdfBlocksFromDrive, getLatestIndiceNormasFromDrive } from "./services/driveService"
 import { extractTextFromPdf } from "./services/pdfService";
 import { analyzeGazetteText } from "./services/geminiService"
 import { AnalysisResult, Norm, Appointment } from "./types/domainTypes";
@@ -118,7 +118,7 @@ async function analyzeWithRetry(
       }
 
       console.warn(
-        `⚠️ Gemini saturado (intento ${attempt}/${maxRetries}). Reintentando en ${delayMs / 1000}s...`
+        `Gemini saturado (intento ${attempt}/${maxRetries}). Reintentando en ${delayMs / 1000}s...`
       );
 
       await delay(delayMs);
@@ -131,6 +131,10 @@ async function analyzeWithRetry(
   try {
     console.log('TANIA – INICIANDO PIPELINE DE PROCESAMIENTO');
     
+    console.log("Cargando indice de normas desde Drive...");
+    const indiceNormas = await getLatestIndiceNormasFromDrive();
+    console.log(`Indice cargado (${Object.keys(indiceNormas).length} normas)`);
+
     const pdfsToParse = await getPdfsToProcess();
     if (pdfsToParse.length === 0) {
       console.log("No hay PDFs para procesar");
@@ -171,7 +175,8 @@ async function analyzeWithRetry(
       consolidatedAnalysis,
       pdfsToParse.length > 1 
         ? `cuadernillo-${pdfsToParse.length}-bloques` 
-        : pdfsToParse[0].filename
+        : pdfsToParse[0].filename,
+      indiceNormas
     );
 
     const pdfFileName = `analisis-el-peruano-${consolidatedAnalysis.gazetteDate}.pdf`;
@@ -214,7 +219,7 @@ async function analyzeWithRetry(
     console.log('Enviando correo...');
 
     await sendEmailWithAttachments(
-      'jbossiob@gmail.com',
+      'pierotarazona822@gmail.com',
       `TanIA, Analisis El Peruano (${consolidatedAnalysis.gazetteDate})`,
       `Hola,
 

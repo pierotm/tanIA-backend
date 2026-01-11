@@ -13,6 +13,7 @@ export interface Norm {
   summary: string;
   relevanceToWaterSector: Relevance;
   pageNumber: number;
+  url?: string;
 }
 
 export interface Appointment {
