@@ -219,7 +219,7 @@ async function analyzeWithRetry(
     console.log('Enviando correo...');
 
     await sendEmailWithAttachments(
-      'pierotarazona822@gmail.com',
+      'jbossiob@gmail.com',
       `TanIA, Analisis El Peruano (${consolidatedAnalysis.gazetteDate})`,
       `Hola,
 
