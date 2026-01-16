@@ -80,6 +80,44 @@ export const analyzeGazetteText = async (pagesText: Array<{ page: number; text: 
     - Limítate a registrar el hecho normativo.
     - Resume de forma mínima y objetiva.
     
+    REGLA DE NO DUPLICIDAD (OBLIGATORIA):
+    - Los MOVIMIENTOS DE CARGOS se registran EXCLUSIVAMENTE
+      en la sección correspondiente a movimientos de cargos.
+    - NINGUNA norma cuyo contenido principal sea un movimiento de cargos
+      (designación, encargatura, renuncia o conclusión)
+      debe volver a aparecer en la sección
+      "Normas relevantes para Agua y Saneamiento".
+    - La sección "Normas relevantes para Agua y Saneamiento",
+      EXCLUYENDO expresamente normas de movimientos de cargos,
+      incluso si pertenecen a entidades del sector.
+
+        REGLA DE EXCLUSIÓN SEMÁNTICA PRIORITARIA (OBLIGATORIA):
+    - Las siguientes acciones normativas NO deben incluirse
+      en la sección "Normas relevantes para Agua y Saneamiento",
+      aunque estén vinculadas a gestión administrativa:
+
+      • Delegación de facultades
+      • Delegación de atribuciones
+      • Delegación de funciones
+      • Designación de funcionarios
+      • Encargatura de cargos
+      • Aceptación de renuncias
+      • Conclusión de designaciones
+      • Ratificación de funcionarios
+
+    - Las normas cuyo contenido principal consista
+      en cualquiera de las acciones anteriores:
+        • NO son normas sectoriales relevantes,
+        • NO deben aparecer en "Normas relevantes para Agua y Saneamiento",
+        • SOLO pueden registrarse (si corresponde)
+          en "Movimientos de cargos públicos".
+
+    - Las delegaciones de facultades o atribuciones
+      se consideran actos administrativos internos
+      y NO constituyen normativa sectorial relevante
+      para el sector Agua y Saneamiento.
+
+
     FORMATO DE SALIDA:
     Responde EXCLUSIVAMENTE en JSON,
     respetando estrictamente el esquema proporcionado.

@@ -3,6 +3,7 @@ import { getLatestPdfFromDrive, getAllPdfBlocksFromDrive, getLatestIndiceNormasF
 import { extractTextFromPdf } from "./services/pdfService";
 import { analyzeGazetteText } from "./services/geminiService"
 import { AnalysisResult, Norm, Appointment } from "./types/domainTypes";
+import { generateAnalysisWordBuffer } from "./services/wordService";
 
 import {
   generateAnalysisPdfBlob,
@@ -182,6 +183,17 @@ async function analyzeWithRetry(
     const pdfFileName = `analisis-el-peruano-${consolidatedAnalysis.gazetteDate}.pdf`;
     const pdfBuffer = Buffer.from(await pdfBlob.arrayBuffer());
 
+    // WORD – Reporte institucional (mismo contenido que el PDF)
+    console.log("Generando Word del análisis...");
+    const wordBuffer = await generateAnalysisWordBuffer(
+      consolidatedAnalysis,
+      pdfsToParse.length > 1
+        ? `cuadernillo-${pdfsToParse.length}-bloques`
+        : pdfsToParse[0].filename
+    );
+    const wordFileName = `analisis-el-peruano-${consolidatedAnalysis.gazetteDate}.docx`;
+
+
     // CSV – Normas Agua y Saneamiento (solo relevantes)
     console.log('Generando CSV de normas...');
     const normsCsvBlob = generateCsvBlob(
@@ -215,11 +227,11 @@ async function analyzeWithRetry(
     const appointmentsCsvFileName = `movimientos-cargos-${consolidatedAnalysis.gazetteDate}.csv`;
     const appointmentsCsvBuffer = Buffer.from(await appointmentsCsvBlob.arrayBuffer());
 
-    // Enviar correo con 3 adjuntos
+    // Enviar correo con 4 adjuntos
     console.log('Enviando correo...');
 
     await sendEmailWithAttachments(
-      'jbossiob@gmail.com',
+      'pierotarazona822@gmail.com',
       `TanIA, Analisis El Peruano (${consolidatedAnalysis.gazetteDate})`,
       `Hola,
 
@@ -227,6 +239,7 @@ Se adjunta el análisis automático del Diario Oficial El Peruano.
 
 Archivos incluidos:
 - Reporte PDF
+- Report Word (Editable)
 - Normas relevantes (CSV)
 - Movimientos de cargos (CSV)
 
@@ -237,6 +250,12 @@ TanIA – El Peruano 2.0`,
           filename: pdfFileName,
           mimeType: 'application/pdf',
           content: pdfBuffer,
+        },
+        {
+          filename: wordFileName,
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          content: wordBuffer,
         },
         {
           filename: normsCsvFileName,
