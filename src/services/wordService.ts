@@ -13,6 +13,7 @@ import {
 } from "docx";
 import { AnalysisResult, Relevance } from "../types/domainTypes";
 import { normalizeNormId } from "../utils/normalizeNormId";
+import { IRunOptions, BorderStyle } from "docx";
 
 export const generateAnalysisWordBuffer = async (
   result: AnalysisResult,
@@ -53,6 +54,44 @@ export const generateAnalysisWordBuffer = async (
     year: "numeric",
   });
 
+  const centerText = (text: string, options?: IRunOptions) =>
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [
+        new TextRun({
+          text,
+          ...options,
+        }),
+      ],
+  });
+
+  const spacer = (lines = 1) =>
+    new Paragraph({
+      spacing: { after: 200 * lines },
+  });
+
+  const cellText = (text: string, options?: IRunOptions) =>
+    new Paragraph({
+      children: [new TextRun({ text, ...options })],
+  });
+
+  const headerCell = (text: string) =>
+    new TableCell({
+      shading: { fill: "F1F5F9" }, // gris institucional
+      margins: { top: 200, bottom: 200, left: 200, right: 200 },
+      children: [
+        cellText(text, { bold: true, size: 22 }),
+      ],
+  });
+
+  const bodyCell = (text: string) =>
+    new TableCell({
+      margins: { top: 180, bottom: 180, left: 200, right: 200 },
+      children: [
+        cellText(text, { size: 20 }),
+      ],
+  });
+
   const summaryText =
     `Se identificaron ${nNorms} norma(s) relevante(s) (ALTA/MEDIA/BAJA) y ` +
     `${nAppointments} movimiento(s) de cargos públicos (designaciones y conclusiones). ` +
@@ -75,68 +114,155 @@ export const generateAnalysisWordBuffer = async (
       text,
       heading: HeadingLevel.HEADING_1,
     });
+  
+  const relevanceColor: Record<Relevance, string> = {
+    [Relevance.ALTA]: "FF0000", // red
+    [Relevance.MEDIA]: "FFA500", // orange
+    [Relevance.BAJA]: "0000FF", // blue
+    [Relevance.NINGUNA]: "000000", // black, though not used
+  };
 
   const doc = new Document({
     sections: [
       {
         children: [
-          // PORTADA
-          h1("Análisis de Normas Legales"),
-          new Paragraph({
-            text: 'Diario Oficial "El Peruano"',
-            alignment: AlignmentType.CENTER,
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              rows: [
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      shading: {
+                        fill: "0B3A75", // azul institucional
+                      },
+                      margins: {
+                        top: 600,
+                        bottom: 600,
+                      },
+                      children: [
+                        centerText("ANÁLISIS DE NORMAS LEGALES", {
+                          bold: true,
+                          size: 36,
+                          color: "FFFFFF",
+                        }),
+                        spacer(),
+                        centerText('Diario Oficial "El Peruano"', {
+                          size: 22,
+                          color: "E6E6E6",
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            }),
+
+            spacer(2),
+
+            centerText(`Fecha del diario: ${gazetteDate}`, { size: 20 }),
+            spacer(),
+            centerText(`Archivo analizado: ${fileName}`, { size: 20 }),
+            spacer(),
+            centerText(`Generado el: ${genDate}`, { size: 20 }),
+
+            spacer(3),
+            new Table({
+              width: { size: 85, type: WidthType.PERCENTAGE },
+              alignment: AlignmentType.CENTER,
+            rows: [
+              new TableRow({
+                children: [
+                  new TableCell({
+                    shading: {
+                      fill: "F4F7FB",
+                    },
+                    margins: {
+                      top: 400,
+                      bottom: 400,
+                      left: 400,
+                      right: 400,
+                    },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: summaryText,
+                            size: 22,
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
           }),
-          new Paragraph(""),
-          p(`Fecha del diario: ${gazetteDate}`),
-          p(`Archivo analizado: ${fileName}`),
-          p(`Generado el: ${genDate}`),
-          new Paragraph(""),
-          p(summaryText),
+
           new Paragraph({ pageBreakBefore: true }),
 
           // RESUMEN
           h2("Resumen ejecutivo"),
           p(summaryText),
+          new Paragraph(""),
 
           // MOVIMIENTOS
           ...(allAppointments.length > 0
             ? [
                 h2("Movimientos de cargos públicos"),
+
                 new Table({
                   width: { size: 100, type: WidthType.PERCENTAGE },
+
+                  borders: {
+                    top: { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                    bottom: { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                    left: { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                    right: { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                    insideHorizontal: {
+                      style: BorderStyle.SINGLE,
+                      size: 4,
+                      color: "E2E8F0",
+                    },
+                    insideVertical: {
+                      style: BorderStyle.SINGLE,
+                      size: 4,
+                      color: "E2E8F0",
+                    },
+                  },
+
                   rows: [
                     new TableRow({
-                      children: ["Institución", "Tipo", "Cargo", "Nombre"].map(
-                        (h) =>
-                          new TableCell({
-                            children: [p(h, true)],
-                          })
-                      ),
+                      children: [
+                        headerCell("Institución"),
+                        headerCell("Tipo"),
+                        headerCell("Cargo"),
+                        headerCell("Nombre"),
+                      ],
                     }),
+
                     ...allAppointments.map(
                       (a) =>
                         new TableRow({
                           children: [
-                            a.institution,
-                            a.type,
-                            a.position,
-                            a.personName,
-                          ].map(
-                            (v) =>
-                              new TableCell({
-                                children: [p(String(v))],
-                              })
-                          ),
+                            bodyCell(a.institution),
+                            bodyCell(a.type),
+                            bodyCell(a.position),
+                            bodyCell(a.personName || "No especificado"),
+                          ],
                         })
                     ),
                   ],
                 }),
+
+                new Paragraph(""),
               ]
             : []),
 
           // NORMAS
           ...(sortedWaterSectorNorms.length > 0
             ? [
+                new Paragraph(""),
                 h2("Normas relevantes para Agua y Saneamiento"),
                 p("Ordenadas por relevancia (ALTA → MEDIA → BAJA)."),
                 new Table({
@@ -144,43 +270,63 @@ export const generateAnalysisWordBuffer = async (
                   rows: [
                     new TableRow({
                       children: ["Relevancia", "Sector", "Norma", "Pág."].map(
-                        (h) =>
-                          new TableCell({
+                        (h, i) => {
+                          const widths = [15, 20, 55, 10];
+                          return new TableCell({
+                            width: { size: widths[i], type: WidthType.PERCENTAGE },
                             children: [p(h, true)],
-                          })
+                          });
+                        }
                       ),
                     }),
                     ...sortedWaterSectorNorms.map((n) => {
                       const normalizedId = normalizeNormId(n.normId);
                       const link = n.normId ? indiceNormas[normalizedId] : undefined;
-                      const normaChildren: (TextRun | ExternalHyperlink)[] = [
-                        new TextRun({ text: n.title + "\n", bold: true }),
+                      const normaChildren = [
+                        new Paragraph({
+                          children: [new TextRun({ text: n.title, bold: true })],
+                        }),
+                        link
+                          ? new Paragraph({
+                              children: [
+                                new ExternalHyperlink({
+                                  children: [
+                                    new TextRun({ text: n.normId, color: "1155CC" }),
+                                  ],
+                                  link,
+                                }),
+                              ],
+                            })
+                          : new Paragraph({
+                              children: [new TextRun({ text: n.normId })],
+                            }),
+                        new Paragraph({
+                          children: [new TextRun({ text: n.summary })],
+                        }),
                       ];
-                      if (link) {
-                        normaChildren.push(
-                          new ExternalHyperlink({
-                            children: [
-                              new TextRun({ text: n.normId + "\n", color: "1155CC" }),
-                            ],
-                            link,
-                          })
-                        );
-                      } else {
-                        normaChildren.push(new TextRun({ text: n.normId + "\n" }));
-                      }
-                      normaChildren.push(new TextRun({ text: n.summary }));
+                      const widths = [15, 20, 55, 10];
                       return new TableRow({
                         children: [
                           new TableCell({
-                            children: [p(n.relevanceToWaterSector, true)],
+                            width: { size: widths[0], type: WidthType.PERCENTAGE },
+                            children: [new Paragraph({
+                              children: [new TextRun({
+                                text: n.relevanceToWaterSector,
+                                bold: true,
+                                color: relevanceColor[n.relevanceToWaterSector]
+                              })]
+                            })],
                           }),
                           new TableCell({
+                            width: { size: widths[1], type: WidthType.PERCENTAGE },
                             children: [p(n.sector)],
                           }),
                           new TableCell({
-                            children: [new Paragraph({ children: normaChildren })],
+                            width: { size: widths[2], type: WidthType.PERCENTAGE },
+                            children: normaChildren,
                           }),
                           new TableCell({
+                            width: { size: widths[3], type: WidthType.PERCENTAGE },
                             children: [p(String(n.pageNumber))],
                           }),
                         ],
