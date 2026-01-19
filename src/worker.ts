@@ -183,13 +183,15 @@ async function analyzeWithRetry(
     const pdfFileName = `analisis-el-peruano-${consolidatedAnalysis.gazetteDate}.pdf`;
     const pdfBuffer = Buffer.from(await pdfBlob.arrayBuffer());
 
+
     // WORD – Reporte institucional (mismo contenido que el PDF)
     console.log("Generando Word del análisis...");
     const wordBuffer = await generateAnalysisWordBuffer(
       consolidatedAnalysis,
       pdfsToParse.length > 1
         ? `cuadernillo-${pdfsToParse.length}-bloques`
-        : pdfsToParse[0].filename
+        : pdfsToParse[0].filename,
+      indiceNormas
     );
     const wordFileName = `analisis-el-peruano-${consolidatedAnalysis.gazetteDate}.docx`;
 
@@ -231,7 +233,7 @@ async function analyzeWithRetry(
     console.log('Enviando correo...');
 
     await sendEmailWithAttachments(
-      'pierotarazona822@gmail.com',
+      'jbossiob@gmail.com',
       `TanIA, Analisis El Peruano (${consolidatedAnalysis.gazetteDate})`,
       `Hola,
 

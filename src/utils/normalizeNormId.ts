@@ -16,6 +16,6 @@ export const normalizeNormId = (id: string): string => {
     .replace('Res.', 'Res.') 
     .replace('R.A.', 'RESOLUCION ADMINISTRATIVA') 
     .replace('RA', 'RESOLUCION ADMINISTRATIVA')
-    .replace(/^RESOLUCION DE [A-Z\s]+ N°/g, 'RESOLUCION N°')
-    .trim(); 
+    .trim();
+    //.replace(/^RESOLUCION DE [A-Z\s]+ N°/g, 'RESOLUCION N°')
 };
