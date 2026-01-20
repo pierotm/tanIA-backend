@@ -74,7 +74,7 @@ export const generateAnalysisWordBuffer = async (
     new Paragraph({
       children: [new TextRun({ text, ...options })],
   });
-
+/*
   const headerCell = (text: string) =>
     new TableCell({
       shading: { fill: "F1F5F9" }, // gris institucional
@@ -82,7 +82,17 @@ export const generateAnalysisWordBuffer = async (
       children: [
         cellText(text, { bold: true, size: 22 }),
       ],
+  });*/
+  const headerCell = (text: string, width?: number) =>
+  new TableCell({
+    width: width
+      ? { size: width, type: WidthType.PERCENTAGE }
+      : undefined,
+    shading: { fill: "F1F5F9" },
+    margins: { top: 200, bottom: 200, left: 200, right: 200 },
+    children: [cellText(text, { bold: true, size: 22 })],
   });
+
 
   const bodyCell = (text: string) =>
     new TableCell({
@@ -264,44 +274,73 @@ export const generateAnalysisWordBuffer = async (
             ? [
                 new Paragraph(""),
                 h2("Normas relevantes para Agua y Saneamiento"),
+                new Paragraph(""),
                 p("Ordenadas por relevancia (ALTA → MEDIA → BAJA)."),
+                new Paragraph(""),
                 new Table({
                   width: { size: 100, type: WidthType.PERCENTAGE },
-                  rows: [
-                    new TableRow({
-                      children: ["Relevancia", "Sector", "Norma", "Pág."].map(
+                  borders: {
+                    top: { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                    bottom: { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                    left: { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                    right: { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                    insideHorizontal: {
+                      style: BorderStyle.SINGLE,
+                      size: 4,
+                      color: "E2E8F0",
+                    },
+                    insideVertical: {
+                      style: BorderStyle.SINGLE,
+                      size: 4,
+                      color: "E2E8F0",
+                    },
+                  },rows: [
+                    /*new TableRow({
+                      children: [headerCell("Relevancia"), headerCell("Sector"), headerCell("Norma"), headerCell("Pág.")].map(
                         (h, i) => {
                           const widths = [15, 20, 55, 10];
                           return new TableCell({
                             width: { size: widths[i], type: WidthType.PERCENTAGE },
+                            margins: { top: 180, bottom: 180, left: 200, right: 200 },
                             children: [p(h, true)],
                           });
                         }
                       ),
+                    }),*/
+                    new TableRow({
+                      children: [
+                        headerCell("Relevancia", 15),
+                        headerCell("Sector", 20),
+                        headerCell("Norma", 55),
+                        headerCell("Pág.", 10),
+                      ],
                     }),
                     ...sortedWaterSectorNorms.map((n) => {
                       const normalizedId = normalizeNormId(n.normId);
                       const link = n.normId ? indiceNormas[normalizedId] : undefined;
                       const normaChildren = [
                         new Paragraph({
-                          children: [new TextRun({ text: n.title, bold: true })],
+                          children: [new TextRun({ text: n.title, bold: true, size: 22 })],
+                          spacing: { after: 120}
                         }),
                         link
                           ? new Paragraph({
                               children: [
                                 new ExternalHyperlink({
                                   children: [
-                                    new TextRun({ text: n.normId, color: "1155CC" }),
+                                    new TextRun({ text: n.normId, color: "1155CC", size: 20 }),
                                   ],
                                   link,
                                 }),
                               ],
+                              spacing: { after: 120}
                             })
                           : new Paragraph({
-                              children: [new TextRun({ text: n.normId })],
+                              children: [new TextRun({ text: n.normId, size: 20 })],
+                              spacing: { after: 120}
                             }),
                         new Paragraph({
-                          children: [new TextRun({ text: n.summary })],
+                          children: [new TextRun({ text: n.summary, size: 20, color: "475569" })],
                         }),
                       ];
                       const widths = [15, 20, 55, 10];

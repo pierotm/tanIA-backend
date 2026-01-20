@@ -1,4 +1,4 @@
-export const normalizeNormId = (id: string): string => { 
+/*export const normalizeNormId = (id: string): string => { 
   return id 
     .toUpperCase() .normalize('NFD')  // separa letras y acentos 
     .replace(/[\u0300-\u036f]/g, '')  // elimina acentos 
@@ -17,5 +17,23 @@ export const normalizeNormId = (id: string): string => {
     .replace('R.A.', 'RESOLUCION ADMINISTRATIVA') 
     .replace('RA', 'RESOLUCION ADMINISTRATIVA')
     .trim();
-    //.replace(/^RESOLUCION DE [A-Z\s]+ N°/g, 'RESOLUCION N°')
+};*/
+
+export const normalizeNormId = (id: string): string => {
+  return id
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+
+    .replace(/\bD\.?S\.?\b/g, 'DECRETO SUPREMO')
+    .replace(/\bR\.?S\.?\b/g, 'RESOLUCION SUPREMA')
+    .replace(/\bR\.?M\.?\b/g, 'RESOLUCION MINISTERIAL')
+    .replace(/\bR\.?J\.?\b/g, 'RESOLUCION JEFATURAL')
+    .replace(/\bR\.?D\.?\b/g, 'RESOLUCION DIRECTORAL')
+    .replace(/\bR\.?A\.?\b/g, 'RESOLUCION ADMINISTRATIVA')
+    .replace(/\bRES\.\s*/g, 'RESOLUCION ')
+    .replace(/\bRESOLUCION DE [A-Z\s]+?\b(?=\s*N°)/g, 'RESOLUCION ')
+    .replace(/N[°ºO]/g, 'N°')
+    .trim();
 };
