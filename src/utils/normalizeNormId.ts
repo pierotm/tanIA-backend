@@ -13,7 +13,7 @@ export const normalizeNormId = (id: string): string => {
     .replace('RJ', 'RESOLUCION JEFATURAL') 
     .replace('R.D.', 'RESOLUCION DIRECTORAL') 
     .replace('RD', 'RESOLUCION DIRECTORAL') 
-    .replace('Res.', 'RES.') 
+    .replace('Res.', 'RESOLUCION') 
     .replace('R.A.', 'RESOLUCION ADMINISTRATIVA') 
     .replace('RA', 'RESOLUCION ADMINISTRATIVA')
     .trim();
